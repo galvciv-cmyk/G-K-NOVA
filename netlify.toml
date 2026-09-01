@@ -1,0 +1,17 @@
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/tasa"
+  to = "/.netlify/functions/tasa"
+  status = 200
+
+[[redirects]]
+  from = "/catalogo"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
