@@ -4,7 +4,16 @@ import { LOGO_B64 } from '../logoBase64.js'
 
 const fmt$ = n => `€${Number(n||0).toFixed(2)}`
 const fmtBs = (n, rate) => `Bs. ${(Number(n||0)*rate).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}`
-const NAVY=[10,22,40], BEIGE=[232,213,183], GRAY=[120,120,120], LGRAY=[235,235,235], GREEN=[34,139,34]
+const NAVY=[10,22,40], BEIGE=[232,213,183], GOLD=[201,169,110], GRAY=[120,120,120], LGRAY=[235,235,235], GREEN=[34,139,34]
+
+function ensureSpace(doc, y, neededHeight, bottomMargin=20) {
+  const pageHeight = doc.internal.pageSize.getHeight ? doc.internal.pageSize.getHeight() : 297
+  if (y + neededHeight > pageHeight - bottomMargin) {
+    doc.addPage()
+    return 20
+  }
+  return y
+}
 
 function buildHeader(doc, title, config, date, receiptNo) {
   const W=210
@@ -76,12 +85,13 @@ export function generateSaleReceipt({ sale, products, customer, config, exchange
     bodyStyles:{fontSize:8,textColor:NAVY},
     alternateRowStyles:{fillColor:[245,245,245]},
     columnStyles:{0:{cellWidth:22},1:{cellWidth:14,halign:'center'},3:{halign:'right'},4:{halign:'right'}},
-    margin:{left:14,right:14}, styles:{cellPadding:2}
+    margin:{left:14,right:14}, styles:{cellPadding:2.5}
   })
 
   // Payments
   y = doc.lastAutoTable.finalY + 6
   if (sale.payments?.length>0) {
+    y = ensureSpace(doc, y, 14 + sale.payments.length * 4.5)
     doc.setFillColor(...LGRAY)
     doc.rect(14,y,W-28,6,'F')
     doc.setTextColor(...NAVY); doc.setFontSize(7); doc.setFont('helvetica','bold')
@@ -110,6 +120,9 @@ export function generateSaleReceipt({ sale, products, customer, config, exchange
     ['PAGADO',paid,false],
     ['PENDIENTE',pending,false],
   ]
+
+  y = ensureSpace(doc, y, rows.length * 11 + 8)
+
   rows.forEach(([label,val,isTotal])=>{
     const h=isTotal?10:7
     if(isTotal){doc.setFillColor(...NAVY);doc.rect(14,y-1,W-28,h+2,'F');doc.setTextColor(...BEIGE);doc.setFontSize(11)}
@@ -122,39 +135,50 @@ export function generateSaleReceipt({ sale, products, customer, config, exchange
     y+=h+4
   })
 
+  // Pending balance BCV notice
+  if(pending > 0){
+    y = ensureSpace(doc, y, 8)
+    doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.setFont('helvetica','italic')
+    doc.text('* Saldos pendientes en Bs. se calcularán a la tasa oficial BCV del día de pago.', 14, y)
+    y += 4
+  }
+
   // Note from seller
-  if(sale.note){
-    y+=4
-    const noteLines=doc.splitTextToSize(sale.note, W-40)
-    const noteH=8+(noteLines.length*4.5)
+  const saleNote = sale.note || sale.notes
+  if(saleNote){
+    const noteLines=doc.splitTextToSize(saleNote, W-40)
+    const noteH=10+(noteLines.length*4.5)
+    y=ensureSpace(doc, y, noteH+6)
     doc.setFillColor(20,36,60); doc.roundedRect(14,y,W-28,noteH,3,3,'F')
+    doc.setDrawColor(...GOLD); doc.setLineWidth(0.3); doc.roundedRect(14,y,W-28,noteH,3,3,'S')
     doc.setTextColor(...BEIGE); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
-    doc.text('NOTA DEL VENDEDOR',17,y+5)
-    doc.setFont('helvetica','normal')
-    doc.text(noteLines,17,y+10)
-    y+=noteH+2
+    doc.text('NOTA DEL VENDEDOR:',18,y+5.5)
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
+    doc.text(noteLines,18,y+10.5)
+    y+=noteH+4
   }
 
   // Quote reference
   if(sale.note?.includes('COT-')||sale.quoteRef){
     const ref=sale.quoteRef||sale.note?.match(/COT-\d+/)?.[0]
     if(ref){
-      y+=2
+      y=ensureSpace(doc, y, 8)
       doc.setFontSize(7.5); doc.setTextColor(...GRAY); doc.setFont('helvetica','italic')
-      doc.text(`Ref. Cotizacion: ${ref}`, 14, y)
+      doc.text(`Ref. Cotización: ${ref}`, 14, y)
       y+=6
     }
   }
 
   // Signature line
-  y+=8
+  y=ensureSpace(doc, y, 22)
   doc.setDrawColor(...LGRAY); doc.line(14,y,90,y)
   doc.setFontSize(7); doc.setTextColor(...GRAY); doc.setFont('helvetica','normal')
-  doc.text('Recibi conforme', 14, y+4)
+  doc.text('Recibí conforme', 14, y+4)
   doc.text(`Fecha: ___/___/______`, 14, y+9)
+  y+=14
 
   // Footer
-  y+=18
+  y=ensureSpace(doc, y, 14)
   doc.setDrawColor(...LGRAY); doc.line(14,y,W-14,y); y+=4
   doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.setFont('helvetica','italic')
   doc.text(`Ref. EUR BCV: Bs. ${rate} | ${config.name||'GK Nova'}`, W/2, y, {align:'center'})
@@ -181,7 +205,7 @@ export function generatePurchaseReceipt({ purchase, products, config }) {
 
   let y=50
   doc.setFontSize(8); doc.setTextColor(...NAVY)
-  ;[['PROVEEDOR', purchase.supplier||'-'], ['NOTAS', purchase.notes||'-']].forEach(([l,v])=>{
+  ;[['PROVEEDOR', purchase.supplier||'-']].forEach(([l,v])=>{
     doc.setFont('helvetica','bold'); doc.text(l,14,y)
     doc.setFont('helvetica','normal'); doc.text(String(v),55,y)
     y+=5
@@ -199,17 +223,34 @@ export function generatePurchaseReceipt({ purchase, products, config }) {
     bodyStyles:{fontSize:8,textColor:NAVY},
     alternateRowStyles:{fillColor:[245,245,245]},
     columnStyles:{0:{cellWidth:22},1:{cellWidth:14,halign:'center'},3:{halign:'right'},4:{halign:'right'}},
-    margin:{left:14,right:14}, styles:{cellPadding:2}
+    margin:{left:14,right:14}, styles:{cellPadding:2.5}
   })
 
   const total=purchase.items.reduce((s,i)=>s+Number(i.qty)*Number(i.cost),0)
   y=doc.lastAutoTable.finalY+8
+  y=ensureSpace(doc, y, 20)
   doc.setFillColor(...NAVY); doc.rect(14,y-1,W-28,12,'F')
   doc.setTextColor(...BEIGE); doc.setFontSize(11); doc.setFont('helvetica','bold')
   doc.text('TOTAL', 18, y+6)
   doc.text(fmt$(total), W-14, y+6, {align:'right'})
+  y+=18
 
-  y+=20
+  // Notes from purchase / buyer
+  const pNote = purchase.notes || purchase.note
+  if(pNote){
+    const noteLines=doc.splitTextToSize(pNote, W-40)
+    const noteH=10+(noteLines.length*4.5)
+    y=ensureSpace(doc, y, noteH+6)
+    doc.setFillColor(20,36,60); doc.roundedRect(14,y,W-28,noteH,3,3,'F')
+    doc.setDrawColor(...GOLD); doc.setLineWidth(0.3); doc.roundedRect(14,y,W-28,noteH,3,3,'S')
+    doc.setTextColor(...BEIGE); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
+    doc.text('NOTAS / OBSERVACIONES:',18,y+5.5)
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
+    doc.text(noteLines,18,y+10.5)
+    y+=noteH+4
+  }
+
+  y=ensureSpace(doc, y, 16)
   doc.setDrawColor(...LGRAY); doc.line(14,y,W-14,y); y+=4
   doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.setFont('helvetica','italic')
   doc.text(`${config.name||'GK Nova'} — Orden de Compra`, W/2, y, {align:'center'})
@@ -242,6 +283,8 @@ export function generatePaymentReceipt({ sale, payment, customer, config, exchan
 
   y+=4
   const rows=[['TOTAL VENTA',total],['ESTE ABONO',payment.amount],['TOTAL PAGADO',paid],['SALDO PENDIENTE',pending]]
+  y=ensureSpace(doc, y, rows.length * 14 + 10)
+
   rows.forEach(([l,v],i)=>{
     const isBig=i===1
     if(isBig){doc.setFillColor(...NAVY);doc.rect(14,y-1,W-28,12,'F');doc.setTextColor(...BEIGE);doc.setFontSize(13)}
@@ -255,9 +298,11 @@ export function generatePaymentReceipt({ sale, payment, customer, config, exchan
   })
 
   y+=6
+  y=ensureSpace(doc, y, 16)
   doc.setDrawColor(...LGRAY); doc.line(14,y,W-14,y); y+=4
   doc.setFontSize(6.5); doc.setTextColor(...GRAY); doc.setFont('helvetica','italic')
   doc.text(`Ref. EUR BCV: Bs. ${rate} | ${config.name}`, W/2, y, {align:'center'})
 
   return doc
 }
+

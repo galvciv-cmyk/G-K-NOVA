@@ -4,13 +4,21 @@ import { LOGO_B64 } from '../logoBase64.js'
 
 const NAVY=[10,22,40],BEIGE=[232,213,183],GOLD=[201,169,110],GRAY=[120,120,120],LGRAY=[235,235,235]
 const fmt$=n=>`€${Number(n||0).toFixed(2)}`
-const fmtBs=(n,r)=>`Bs. ${(Number(n||0)*Number(r||655)).toLocaleString('es-VE',{minimumFractionDigits:2})}`
+const fmtBs=(n,r)=>`Bs. ${(Number(n||0)*Number(r||655)).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}`
+
+function ensureSpace(doc, y, neededHeight, bottomMargin=20) {
+  const pageHeight = doc.internal.pageSize.getHeight ? doc.internal.pageSize.getHeight() : 297
+  if (y + neededHeight > pageHeight - bottomMargin) {
+    doc.addPage()
+    return 20
+  }
+  return y
+}
 
 export function generateQuote({quote,products,customer,config,exchangeRate}){
   const doc=new jsPDF({unit:'mm',format:'a4'})
   const W=210, rate=exchangeRate||config.exchangeRate||655
   const quoteNo=`COT-${String(quote.quoteNumber||1).padStart(6,'0')}`
-  const validUntil=new Date(new Date(quote.date).getTime()+3*24*60*60*1000).toLocaleDateString('es-VE')
 
   // Header
   doc.setFillColor(...NAVY); doc.rect(0,0,W,45,'F')
@@ -22,10 +30,10 @@ export function generateQuote({quote,products,customer,config,exchangeRate}){
   doc.setTextColor(...BEIGE); doc.setFontSize(8); doc.setFont('helvetica','bold')
   doc.text(quoteNo,12,36); doc.text(new Date(quote.date).toLocaleDateString('es-VE'),12,41)
 
-  // Valid until badge
-  doc.setFillColor(200,150,0); doc.roundedRect(W-65,32,52,10,2,2,'F')
-  doc.setTextColor(255,255,255); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
-  doc.text(`Válida hasta: ${validUntil}`,W-39,38.5,{align:'center'})
+  // Rate badge
+  doc.setFillColor(...GOLD); doc.roundedRect(W-66,31,52,10,2,2,'F')
+  doc.setTextColor(...NAVY); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
+  doc.text('TASA BCV DEL DÍA',W-40,37.5,{align:'center'})
 
   // Client
   let y=50
@@ -48,7 +56,7 @@ export function generateQuote({quote,products,customer,config,exchangeRate}){
     bodyStyles:{fontSize:8,textColor:NAVY},
     alternateRowStyles:{fillColor:[245,245,245]},
     columnStyles:{0:{cellWidth:22},1:{cellWidth:14,halign:'center'},3:{halign:'right'},4:{halign:'right'}},
-    margin:{left:14,right:14},styles:{cellPadding:2}
+    margin:{left:14,right:14},styles:{cellPadding:2.5}
   })
 
   // Totals
@@ -57,7 +65,10 @@ export function generateQuote({quote,products,customer,config,exchangeRate}){
   const discount=quote.discount||0
   const total=subtotal-discount
 
-  ;[['SUBTOTAL',subtotal,false],['DESCUENTO',-discount,false],['TOTAL',total,true]].forEach(([l,v,big])=>{
+  const totalRows=[['SUBTOTAL',subtotal,false],['DESCUENTO',-discount,false],['TOTAL',total,true]]
+  y=ensureSpace(doc, y, totalRows.length*12+6)
+
+  totalRows.forEach(([l,v,big])=>{
     const h=big?11:7
     if(big){doc.setFillColor(...NAVY);doc.rect(14,y-1,W-28,h+2,'F');doc.setTextColor(...BEIGE);doc.setFontSize(12)}
     else{doc.setFillColor(...LGRAY);doc.rect(100,y-1,W-114,h,'F');doc.setTextColor(...NAVY);doc.setFontSize(8)}
@@ -71,31 +82,36 @@ export function generateQuote({quote,products,customer,config,exchangeRate}){
 
   // Notes
   y+=6
-  doc.setFillColor(240,235,220); doc.roundedRect(14,y,W-28,18,3,3,'F')
+  y=ensureSpace(doc, y, 22)
+  doc.setFillColor(240,235,220); doc.roundedRect(14,y,W-28,16,3,3,'F')
+  doc.setDrawColor(...GOLD); doc.setLineWidth(0.3); doc.roundedRect(14,y,W-28,16,3,3,'S')
   doc.setTextColor(80,60,20); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
-  doc.text('NOTA IMPORTANTE',17,y+6)
-  doc.setFont('helvetica','normal')
-  doc.text('El total en Bs. es referencial y puede variar según la tasa BCV del día de pago.',17,y+11)
-  doc.text(`Cotización válida por 3 días. Vence: ${validUntil}`,17,y+16)
+  doc.text('NOTA IMPORTANTE:',18,y+5.5)
+  doc.setFont('helvetica','normal'); doc.setFontSize(7)
+  doc.text('• El precio en Bs. puede variar diariamente según la tasa oficial BCV del día de pago.',18,y+10.5)
+  doc.text('• Los montos en divisa (€) se mantienen como referencia base de la cotización.',18,y+14.5)
+  y+=20
 
-  // Custom note from quote
-  if(quote.note){
-    y+=24
-    const noteLines=doc.splitTextToSize(quote.note, W-40)
-    const noteH=8+(noteLines.length*4.5)
+  // Custom note from quote / seller
+  const qNote = quote.note || quote.notes
+  if(qNote){
+    const noteLines=doc.splitTextToSize(qNote, W-40)
+    const noteH=10+(noteLines.length*4.5)
+    y=ensureSpace(doc, y, noteH+6)
     doc.setFillColor(20,36,60); doc.roundedRect(14,y,W-28,noteH,3,3,'F')
+    doc.setDrawColor(...GOLD); doc.setLineWidth(0.3); doc.roundedRect(14,y,W-28,noteH,3,3,'S')
     doc.setTextColor(...BEIGE); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
-    doc.text('NOTA DEL VENDEDOR',17,y+6)
-    doc.setFont('helvetica','normal')
-    doc.text(noteLines,17,y+11)
-    y+=noteH+2
+    doc.text('NOTA DEL VENDEDOR:',18,y+5.5)
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
+    doc.text(noteLines,18,y+10.5)
+    y+=noteH+4
   }
 
   // Footer
-  y+=24
+  y=ensureSpace(doc, y, 16)
   doc.setDrawColor(...LGRAY);doc.line(14,y,W-14,y);y+=4
   doc.setFontSize(6.5);doc.setTextColor(...GRAY);doc.setFont('helvetica','italic')
-  doc.text(`${config.name||'GK Nova'} — ${quoteNo}`,W/2,y,{align:'center'})
+  doc.text(`Tasa referencial BCV: 1 EUR = Bs. ${rate} | ${config.name||'GK Nova'} — ${quoteNo}`,W/2,y,{align:'center'})
 
   return doc
 }

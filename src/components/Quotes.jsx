@@ -50,7 +50,7 @@ export default function Quotes({state, ops}){
     doc.save(`cotizacion-${String(finalQuote.quoteNumber).padStart(6,"0")}.pdf`)
     toast(`Cotización COT-${String(finalQuote.quoteNumber).padStart(6,"0")} generada`)
     const phone=selCustomer?.phone||customerPhone
-    if(phone){const msg=`Hola ${finalQuote.customerName} 👋\n\nTe enviamos tu *Cotización* de *GK Nova*.\n\n📋 *${cart.length} producto(s)*\n💰 *Total: ${fmt$(total)}*\n⚠️ El total en Bs. puede variar según la tasa BCV.\n📅 Válida por 3 días.\n\n¡Quedamos atentos! 🙏`;setTimeout(()=>{sendWhatsApp(phone,msg);toast("Enviado por WhatsApp")},1500)}
+    if(phone){const msg=`Hola ${finalQuote.customerName} 👋\n\nTe enviamos tu *Cotización* de *GK Nova*.\n\n📋 *${cart.length} producto(s)*\n💰 *Total: ${fmt$(total)}*\n⚠️ El precio en Bs. puede variar diariamente según la tasa oficial BCV del día de pago.\n\n¡Quedamos atentos! 🙏`;setTimeout(()=>{sendWhatsApp(phone,msg);toast("Enviado por WhatsApp")},1500)}
     setCart([]);setCustomerName("");setCustomerPhone("");setSelCustomer(null);setDiscount(0);setQuoteNote("");setShowNew(false)
   }
 
@@ -80,8 +80,6 @@ export default function Quotes({state, ops}){
 
   const getStatus=q=>{
     if(q.status==="converted")return "converted"
-    const expiry=new Date(new Date(q.date).getTime()+3*24*60*60*1000)
-    if(new Date()>expiry)return "expired"
     return q.status||"pending"
   }
 
@@ -120,11 +118,11 @@ export default function Quotes({state, ops}){
 
     {detail&&(()=>{
       const status=getStatus(detail)
-      const validUntil=new Date(new Date(detail.date).getTime()+3*24*60*60*1000).toLocaleDateString("es-VE")
+      const currentRate = detail.exchangeRate || state.config?.exchangeRate || 655
       return <Modal title={`COT-${String(detail.quoteNumber).padStart(6,"0")}`} onClose={()=>setDetail(null)} wide>
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
           <Badge color={statusColor[status]}>{statusLabel[status]}</Badge>
-          <Badge color="#9CA3AF">Válida hasta: {validUntil}</Badge>
+          <Badge color={GOLD}>Tasa BCV referencial: Bs. {currentRate}</Badge>
         </div>
         {detail.items?.map((item,i)=>{
           const p=state.products.find(pr=>pr.id===item.productId)||{}
@@ -138,14 +136,14 @@ export default function Quotes({state, ops}){
             <span style={{color:GOLD,fontWeight:700}}>TOTAL</span>
             <span style={{color:GREEN,fontWeight:800,fontSize:16}}>{fmt$(detail.total)}</span>
           </div>
-          <p style={{color:"#6B7280",fontSize:11,marginTop:2}}>{fmtBs(detail.total,state.config?.exchangeRate)} (referencial)</p>
+          <p style={{color:"#6B7280",fontSize:11,marginTop:2}}>{fmtBs(detail.total,currentRate)} (precio en Bs. varía según tasa oficial del día)</p>
         </div>
         {detail.note&&<div style={{background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"10px 14px",marginTop:10}}>
           <p style={{color:GOLD,fontSize:13}}>{detail.note}</p>
         </div>}
         <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
           <Btn variant="ghost" onClick={()=>{const doc=generateQuote({quote:detail,products:state.products,customer:state.customers?.find(c=>c.id===detail.customerId),config:state.config,exchangeRate:detail.exchangeRate||state.config?.exchangeRate});doc.save(`cotizacion-${String(detail.quoteNumber).padStart(6,"0")}.pdf`)}} style={{fontSize:12}}>🖨 PDF</Btn>
-          {detail.customerPhone&&<Btn variant="ghost" onClick={()=>sendWhatsApp(detail.customerPhone,`Hola ${detail.customerName}, adjunto tu cotización por ${fmt$(detail.total)}. ¡Válida 3 días! 🙏`)} style={{fontSize:12}}>💬 WhatsApp</Btn>}
+          {detail.customerPhone&&<Btn variant="ghost" onClick={()=>sendWhatsApp(detail.customerPhone,`Hola ${detail.customerName}, adjunto tu cotización por ${fmt$(detail.total)}. (Precio en Bs. sujeto a tasa oficial BCV del día de pago) 🙏`)} style={{fontSize:12}}>💬 WhatsApp</Btn>}
           {(status==="pending"||status==="expired")&&<Btn variant="green" onClick={()=>approveQuote(detail)} style={{fontSize:12}}>✅ Aprobar → Venta</Btn>}
           <Btn variant="danger" onClick={async()=>{if(window.confirm("¿Eliminar?")){await ops.removeQuote(detail.id);setDetail(null);toast("Cotización eliminada","info")}}} style={{fontSize:12}}>🗑</Btn>
         </div>

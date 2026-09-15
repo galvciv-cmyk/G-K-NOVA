@@ -80,9 +80,7 @@ export default function Quotations({state, onUpdate}) {
   const statusLabel = {pending:"⏳ Pendiente", approved:"✅ Aprobada", rejected:"❌ Rechazada", expired:"⌛ Vencida"}
 
   const getStatus = (q) => {
-    if(q.status!=="pending") return q.status
-    const expiry = new Date(q.date); expiry.setDate(expiry.getDate()+3)
-    return new Date()>expiry?"expired":"pending"
+    return q.status || "pending"
   }
 
   return <div>
@@ -138,7 +136,7 @@ export default function Quotations({state, onUpdate}) {
       {showDetail.note&&<p style={{color:"#9CA3AF",fontSize:12,marginTop:8,fontStyle:"italic"}}>{showDetail.note}</p>}
       <div style={{display:"flex",gap:8,marginTop:14,flexWrap:"wrap"}}>
         <Btn variant="ghost" onClick={()=>{const doc=generateQuotation({quotation:showDetail,products:state.products,customer:state.customers.find(c=>c.id===showDetail.customerId),config:state.config});doc.save(`cotizacion-${String(showDetail.quotationNumber).padStart(6,"0")}.pdf`)}} style={{fontSize:12}}>🖨 PDF</Btn>
-        {showDetail.customerPhone&&<Btn variant="ghost" onClick={()=>sendWhatsApp(showDetail.customerPhone,`Hola ${showDetail.customerName}, adjunto tu cotización COT-${String(showDetail.quotationNumber).padStart(6,"0")} de GK Nova por ${fmt$(showDetail.total)}. Válida 3 días. ¿La aprobamos? 🙂`)} style={{fontSize:12}}>💬 WhatsApp</Btn>}
+        {showDetail.customerPhone&&<Btn variant="ghost" onClick={()=>sendWhatsApp(showDetail.customerPhone,`Hola ${showDetail.customerName}, adjunto tu cotización COT-${String(showDetail.quotationNumber).padStart(6,"0")} de GK Nova por ${fmt$(showDetail.total)}. (Precio en Bs. sujeto a tasa oficial BCV del día). ¿La aprobamos? 🙂`)} style={{fontSize:12}}>💬 WhatsApp</Btn>}
         {getStatus(showDetail)==="pending"&&<>
           <Btn variant="green" onClick={()=>approveQuotation(showDetail)} style={{fontSize:12}}>✅ Aprobar y Convertir en Venta</Btn>
           <Btn variant="danger" onClick={()=>{onUpdate({quotations:(state.quotations||[]).map(q=>q.id===showDetail.id?{...q,status:"rejected"}:q)});setShowDetail(null)}} style={{fontSize:12}}>❌ Rechazar</Btn>
