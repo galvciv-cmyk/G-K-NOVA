@@ -1,4 +1,4 @@
-exports.handler = async function(event, context) {
+export async function handler(event, context) {
   try {
     const response = await fetch('https://ve.dolarapi.com/v1/dolares/oficial')
     const data = await response.json()
